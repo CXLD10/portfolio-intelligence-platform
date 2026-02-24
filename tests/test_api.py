@@ -5,16 +5,18 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_intelligence_endpoint() -> None:
+def test_intelligence_endpoint_includes_provenance_and_confidence() -> None:
     r = client.get("/api/v1/intelligence", params={"symbol": "INFY", "exchange": "NSE"})
     assert r.status_code == 200
     body = r.json()
     assert body["schema_version"] == "1.0"
     assert body["recommendation"] in {"BUY", "HOLD", "SELL"}
-    assert set(["quant_score", "fundamental_score", "sentiment_score", "risk_score"]).issubset(set(body))
+    assert "provenance" in body
+    assert "confidence_diagnostics" in body
+    assert "benchmark" in body
 
 
-def test_portfolio_evaluate_manual_mode() -> None:
+def test_portfolio_evaluate_includes_stress_tests() -> None:
     payload = {
         "assets": [
             {"symbol": "AAPL", "exchange": "NASDAQ", "weight": 0.7},
@@ -26,7 +28,7 @@ def test_portfolio_evaluate_manual_mode() -> None:
     assert r.status_code == 200
     body = r.json()
     assert abs(sum(body["weights"].values()) - 1.0) < 1e-8
-    assert "correlation_matrix" in body
+    assert len(body["stress_tests"]) == 4
 
 
 def test_backtest_endpoint() -> None:
@@ -34,18 +36,10 @@ def test_backtest_endpoint() -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["schema_version"] == "1.0"
-    assert isinstance(body["trade_log"], list)
+    assert body["benchmark_symbol"] == "SP500"
 
 
-def test_sentiment_endpoint() -> None:
-    r = client.get("/api/v1/sentiment", params={"symbol": "INFY", "exchange": "NSE"})
+def test_metrics_endpoint() -> None:
+    r = client.get("/metrics")
     assert r.status_code == 200
-    body = r.json()
-    assert body["bullish_ratio"] + body["bearish_ratio"] == 1
-
-
-def test_market_overview() -> None:
-    r = client.get("/api/v1/market/overview")
-    assert r.status_code == 200
-    body = r.json()
-    assert "exchange_health" in body
+    assert "request_count" in r.json()

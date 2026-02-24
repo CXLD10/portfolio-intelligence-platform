@@ -6,6 +6,7 @@ from app.config.settings import settings
 from app.integrations.project1_client import Project1Client
 from app.integrations.project2_client import Project2Client
 from app.models.schemas import BacktestResponse, Exchange
+from app.services.benchmark_engine import benchmark_symbol_for_exchange
 from app.utils.math_utils import returns_from_prices
 
 
@@ -23,7 +24,7 @@ class BacktestEngine:
         bias = 1 if signal_seed["prediction"] == "BUY" else -1 if signal_seed["prediction"] == "SELL" else 0
 
         signals = []
-        for i, r in enumerate(rets):
+        for r in rets:
             momentum = np.sign(r)
             sig = 1 if momentum + bias >= 1 else 0
             signals.append(sig)
@@ -33,12 +34,7 @@ class BacktestEngine:
         peaks = np.maximum.accumulate(equity)
         dd_curve = equity / peaks - 1
         trades = [
-            {
-                "index": i,
-                "signal": int(signals[i]),
-                "asset_return": float(round(rets[i], 6)),
-                "strategy_return": float(round(strat_rets[i], 6)),
-            }
+            {"index": i, "signal": int(signals[i]), "asset_return": float(round(rets[i], 6)), "strategy_return": float(round(strat_rets[i], 6))}
             for i in range(len(strat_rets))
             if signals[i] != 0
         ]
@@ -58,5 +54,6 @@ class BacktestEngine:
             equity_curve=[float(round(v, 6)) for v in equity.tolist()],
             drawdown_curve=[float(round(v, 6)) for v in dd_curve.tolist()],
             trade_log=trades,
+            benchmark_symbol=benchmark_symbol_for_exchange(exchange),
             schema_version=settings.schema_version,
         )

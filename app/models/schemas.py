@@ -26,6 +26,43 @@ class ErrorResponse(BaseModel):
     schema_version: str
 
 
+class ScoreWeights(BaseModel):
+    quant: float
+    fundamental: float
+    sentiment: float
+    risk: float
+
+
+class ModelProvenance(BaseModel):
+    model_version: str
+    feature_schema_version: str
+    prediction_generated_at: str
+    forecast_horizon_days: int
+    upstream_latency_ms: float
+
+
+class ConfidenceDiagnostics(BaseModel):
+    raw_confidence: float
+    calibrated_confidence: float
+    disagreement_index: float
+    stability_score: float
+    confidence_decay_factor: float
+
+
+class ExplainabilityMetadata(BaseModel):
+    feature_importance: dict[str, float]
+    top_positive_drivers: list[str]
+    top_negative_drivers: list[str]
+
+
+class BenchmarkMetrics(BaseModel):
+    benchmark_symbol: str
+    active_return: float
+    tracking_error: float
+    information_ratio: float
+    relative_drawdown: float
+
+
 class IntelligenceResponse(BaseModel):
     exchange: Exchange
     symbol: str
@@ -39,6 +76,15 @@ class IntelligenceResponse(BaseModel):
     fundamental_score: float
     sentiment_score: float
     risk_score: float
+    composite_score: float
+    score_weights: ScoreWeights
+    composite_formula_version: str
+    confidence_diagnostics: ConfidenceDiagnostics
+    explainability: ExplainabilityMetadata
+    benchmark: BenchmarkMetrics
+    market_regime: Literal["bull", "bear", "neutral"]
+    volatility_regime: Literal["low", "medium", "high"]
+    provenance: ModelProvenance
     drivers: list[str]
     warnings: list[str]
     summary: str
@@ -49,6 +95,14 @@ class PortfolioAsset(BaseModel):
     symbol: str
     exchange: Exchange = Exchange.NASDAQ
     weight: float | None = Field(default=None, ge=0)
+
+
+class StressScenario(BaseModel):
+    name: str
+    shocked_return: float
+    shocked_volatility: float
+    shocked_var_95: float
+    impact_pct: float
 
 
 class PortfolioEvaluateRequest(BaseModel):
@@ -68,6 +122,7 @@ class PortfolioEvaluateResponse(BaseModel):
     sector_exposure: dict[str, float]
     correlation_matrix: dict[str, dict[str, float]]
     risk_contribution: dict[str, float]
+    stress_tests: list[StressScenario]
     schema_version: str
 
 
@@ -83,6 +138,7 @@ class BacktestResponse(BaseModel):
     equity_curve: list[float]
     drawdown_curve: list[float]
     trade_log: list[dict[str, Any]]
+    benchmark_symbol: str
     schema_version: str
 
 
