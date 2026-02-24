@@ -3,6 +3,7 @@ import {
   IntelligenceResponse,
   IntelligenceSummaryResponse,
   PortfolioResponse,
+  BacktestResponse,
 } from './types'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -32,7 +33,7 @@ export const getSentiment = cache(async (symbol: string, exchange: string) =>
 )
 
 export const getBacktest = cache(async (symbol: string, exchange: string) =>
-  fetchJson<any>(`/api/v1/backtest?symbol=${symbol}&exchange=${exchange}&period=252`),
+  fetchJson<BacktestResponse>(`/api/v1/backtest?symbol=${symbol}&exchange=${exchange}&period=252`),
 )
 
 export async function evaluatePortfolio(payload: unknown) {

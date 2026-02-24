@@ -125,6 +125,7 @@ class PortfolioEvaluateResponse(BaseModel):
     correlation_matrix: dict[str, dict[str, float]]
     risk_contribution: dict[str, float]
     stress_tests: list[StressScenario]
+    expected_asset_returns: dict[str, float]
     schema_version: str
 
 
@@ -134,10 +135,14 @@ class BacktestResponse(BaseModel):
     period_days: int
     strategy_return: float
     buy_hold_return: float
+    active_return: float
+    information_ratio: float
     max_drawdown: float
     win_rate: float
+    trade_count: int
     avg_return_per_trade: float
     equity_curve: list[float]
+    benchmark_curve: list[float]
     drawdown_curve: list[float]
     trade_log: list[dict[str, Any]]
     benchmark_symbol: str

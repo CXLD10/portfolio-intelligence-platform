@@ -1,3 +1,5 @@
+export type Exchange = 'NSE' | 'BSE' | 'NASDAQ'
+
 export type OhlcPoint = {
   date: string
   open: number
@@ -46,12 +48,45 @@ export type PortfolioStressMetric = {
 }
 
 export type PortfolioResponse = {
+  weights: Record<string, number>
   expected_return: number
   volatility: number
   sharpe_ratio: number
+  var_95?: number
+  max_drawdown_proxy?: number
+  beta_vs_benchmark?: number
+  concentration_index_hhi?: number
+  sector_exposure?: Record<string, number>
   stress_tests: PortfolioStressMetric[]
-  weights: Record<string, number>
-  risk_contribution?: Record<string, number>
-  expected_asset_returns?: Record<string, number>
+  risk_contribution: Record<string, number>
+  expected_asset_returns: Record<string, number>
   correlation_matrix: Record<string, Record<string, number>>
+}
+
+export type BacktestTrade = {
+  index: number
+  signal: string
+  asset_return: number
+  strategy_return: number
+  details?: string
+}
+
+export type BacktestResponse = {
+  symbol: string
+  exchange: Exchange
+  period_days: number
+  strategy_return: number
+  buy_hold_return: number
+  active_return: number
+  information_ratio: number
+  max_drawdown: number
+  win_rate: number
+  trade_count: number
+  avg_return_per_trade: number
+  equity_curve: number[]
+  benchmark_curve: number[]
+  drawdown_curve: number[]
+  trade_log: BacktestTrade[]
+  benchmark_symbol: string
+  schema_version: string
 }
