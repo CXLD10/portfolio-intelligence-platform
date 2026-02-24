@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import time
 
-import numpy as np
-
 from app.config.settings import settings
+from app.integrations.http_common import UpstreamError
 from app.integrations.project1_client import Project1Client
 from app.integrations.project2_client import Project2Client
 from app.models.schemas import (
@@ -14,6 +13,7 @@ from app.models.schemas import (
     ExplainabilityMetadata,
     IntelligenceResponse,
     ModelProvenance,
+    Recommendation,
     ScoreWeights,
 )
 from app.services.agent_reasoning_engine import AgentReasoningEngine
@@ -36,13 +36,7 @@ class IntelligenceOrchestrator:
         self.cache = TTLCache()
 
     def _fundamental_score(self, fundamentals: dict[str, float | str]) -> float:
-        numeric = filter_valid_numeric_map(
-            {
-                "roe": fundamentals.get("roe"),
-                "revenue_growth": fundamentals.get("revenue_growth"),
-                "debt_to_equity": fundamentals.get("debt_to_equity"),
-            }
-        )
+        numeric = filter_valid_numeric_map({"roe": fundamentals.get("roe"), "revenue_growth": fundamentals.get("revenue_growth"), "debt_to_equity": fundamentals.get("debt_to_equity")})
         roe = numeric.get("roe", 0.05)
         rev = numeric.get("revenue_growth", 0)
         debt = numeric.get("debt_to_equity", 1)
@@ -86,16 +80,39 @@ class IntelligenceOrchestrator:
             return cached
 
         t0 = time.perf_counter()
-        quote = self.p1.get_quote(symbol, exchange)
-        fundamentals = self.p1.get_fundamentals(symbol, exchange)
-        metrics_store.record_upstream("project1", "up")
+        p1_error = None
+        p2_error = None
+        try:
+            quote = self.p1.get_quote(symbol, exchange)
+            fundamentals = self.p1.get_fundamentals(symbol, exchange)
+            hist = self.p1.get_historical(symbol, exchange, 252)
+            metrics_store.record_upstream("project1", "healthy")
+        except UpstreamError as exc:
+            p1_error = exc
+            metrics_store.record_upstream("project1", "unreachable")
+            quote = {"price": 0.0, "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")}
+            fundamentals = {"roe": 0.05, "revenue_growth": 0.0, "debt_to_equity": 1.0}
+            hist = []
 
-        prediction = self.p2.get_prediction(symbol, exchange)
-        features = self.p2.get_features(symbol, exchange)
-        metrics_store.record_upstream("project2", "up")
+        try:
+            prediction = self.p2.get_prediction(symbol, exchange)
+            features = self.p2.get_features(symbol, exchange)
+            try:
+                risk_payload = self.p2.get_risk(symbol, exchange)
+                prediction["risk_score"] = risk_payload["risk_score"]
+            except UpstreamError:
+                pass
+            metrics_store.record_upstream("project2", "healthy")
+        except UpstreamError as exc:
+            p2_error = exc
+            metrics_store.record_upstream("project2", "unreachable")
+            prediction = {"prediction": "HOLD", "confidence": 0.5, "expected_return": 0.0, "risk_score": 0.5, "forecast_horizon": "5d", "model_version": "unknown"}
+            features = {"volatility": 0.2, "drawdown": -0.2}
+
+        if p1_error and p2_error:
+            raise UpstreamError("project1", "UPSTREAM_BOTH_UNAVAILABLE", f"project1={p1_error.message}; project2={p2_error.message}")
 
         sent = self.sentiment.compute(symbol, exchange)
-
         quant = self._quant_score(prediction, features)
         fundamental = self._fundamental_score(fundamentals)
         risk = self._risk_score(prediction, features)
@@ -103,55 +120,48 @@ class IntelligenceOrchestrator:
 
         weights = ScoreWeights(quant=0.5, fundamental=0.3, sentiment=0.2, risk=0.35)
         composite = clamp(weights.quant * quant + weights.fundamental * fundamental + weights.sentiment * sentiment - weights.risk * risk, 0, 1)
-
-        confidence_diag = self._confidence_calibration(
-            raw_confidence=float(prediction.get("confidence", 0.5)),
-            quant=quant,
-            sentiment=sentiment,
-            vol=float(features.get("volatility", 0.2)),
-        )
-
+        confidence_diag = self._confidence_calibration(float(prediction.get("confidence", 0.5)), quant, sentiment, float(features.get("volatility", 0.2)))
         reasoned = self.reasoning.compute(quant, fundamental, sentiment, risk)
-        hist = self.p1.get_historical(symbol, exchange, 252)
+
         bench_symbol = benchmark_symbol_for_exchange(exchange)
-        bench_hist = self.p1.get_historical(bench_symbol, exchange, 252)
-        a_ret = returns_from_prices([x["close"] for x in hist])
-        b_ret = returns_from_prices([x["close"] for x in bench_hist])
-        bm = BenchmarkMetrics(**self.benchmark.compare(a_ret, b_ret, bench_symbol))
+        try:
+            bench_hist = self.p1.get_historical(bench_symbol, exchange, 252)
+            bm = BenchmarkMetrics(**self.benchmark.compare(returns_from_prices([x["close"] for x in hist]), returns_from_prices([x["close"] for x in bench_hist]), bench_symbol))
+        except Exception:
+            bm = BenchmarkMetrics(benchmark_symbol=bench_symbol, active_return=0.0, tracking_error=0.0, information_ratio=0.0, relative_drawdown=0.0)
 
         vol = float(features.get("volatility", 0.2))
         regime = "bull" if float(prediction.get("expected_return", 0)) > 0.02 else "bear" if float(prediction.get("expected_return", 0)) < -0.02 else "neutral"
         vol_regime = "low" if vol < 0.18 else "medium" if vol < 0.32 else "high"
 
         explainability = ExplainabilityMetadata(
-            feature_importance={
-                "probability_up": 0.34,
-                "volatility": 0.23,
-                "drawdown": 0.18,
-                "roe": 0.15,
-                "sentiment_score": 0.10,
-            },
+            feature_importance={"probability_up": 0.34, "volatility": 0.23, "drawdown": 0.18, "roe": 0.15, "sentiment_score": 0.10},
             top_positive_drivers=["probability_up", "roe", "sentiment_score"],
             top_negative_drivers=["volatility", "drawdown"],
         )
 
         latency_ms = (time.perf_counter() - t0) * 1000
         provenance = ModelProvenance(
-            model_version=str(prediction.get("model_version", "v1")),
+            model_version=str(prediction.get("model_version", "unknown")),
             feature_schema_version=settings.feature_schema_version,
-            prediction_generated_at=quote["timestamp"],
+            prediction_generated_at=str(quote.get("timestamp")),
             forecast_horizon_days=int(str(prediction.get("forecast_horizon", "5d")).replace("d", "")),
             upstream_latency_ms=round(latency_ms, 3),
         )
 
-        output = IntelligenceResponse(
+        degraded = p1_error is not None or p2_error is not None
+        degraded_source = "project1" if p1_error is not None else "project2" if p2_error is not None else None
+
+        out = IntelligenceResponse(
+            degraded=degraded,
+            degraded_source=degraded_source,
             exchange=exchange,
             symbol=symbol,
-            price=float(quote["price"]),
-            recommendation=reasoned["recommendation"],
+            price=float(quote.get("price", 0.0)),
+            recommendation=Recommendation(reasoned["recommendation"]),
             confidence=confidence_diag.calibrated_confidence,
-            expected_return=float(prediction["expected_return"]),
-            forecast_horizon=str(prediction["forecast_horizon"]),
+            expected_return=float(prediction.get("expected_return", 0.0)),
+            forecast_horizon=str(prediction.get("forecast_horizon", "5d")),
             risk_level=reasoned["risk_level"],
             quant_score=quant,
             fundamental_score=fundamental,
@@ -167,9 +177,9 @@ class IntelligenceOrchestrator:
             volatility_regime=vol_regime,
             provenance=provenance,
             drivers=reasoned["drivers"],
-            warnings=reasoned["warnings"],
+            warnings=reasoned["warnings"] + ([f"degraded_source={degraded_source}"] if degraded_source else []),
             summary=reasoned["summary"],
             schema_version=settings.schema_version,
         )
-        self.cache.set(key, output, settings.intelligence_cache_ttl_s)
-        return output
+        self.cache.set(key, out, settings.intelligence_cache_ttl_s)
+        return out

@@ -158,3 +158,38 @@ gcloud run domain-mappings create --service pip-frontend --domain <YOUR_DOMAIN> 
 - CPU allocated during request only.
 - Small memory footprint (`256Mi`) and `max-instances=2`.
 - Stateless API and frontend services.
+
+
+## Runtime Upstream Configuration
+
+Backend requires runtime wiring to Project 1 and Project 2.
+
+Required environment variables:
+
+- `P1_BASE_URL`
+- `P2_BASE_URL`
+
+Optional:
+
+- `P1_API_KEY`
+- `P2_API_KEY`
+- `TIMEOUT_SECONDS`
+- `RETRY_ATTEMPTS`
+- `RETRY_BACKOFF_FACTOR`
+
+## Secret Manager Setup
+
+```bash
+echo -n "<P1_API_KEY_VALUE>" | gcloud secrets create p1-api-key --data-file=-
+echo -n "<P2_API_KEY_VALUE>" | gcloud secrets create p2-api-key --data-file=-
+
+gcloud secrets add-iam-policy-binding p1-api-key   --member="serviceAccount:pip-runtime-sa@<PROJECT_ID>.iam.gserviceaccount.com"   --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding p2-api-key   --member="serviceAccount:pip-runtime-sa@<PROJECT_ID>.iam.gserviceaccount.com"   --role="roles/secretmanager.secretAccessor"
+```
+
+## Cloud Run deploy with runtime upstream wiring
+
+```bash
+gcloud run deploy project3-backend   --image us-central1-docker.pkg.dev/<PROJECT_ID>/pip-repo/pip-backend:latest   --region us-central1   --service-account pip-runtime-sa@<PROJECT_ID>.iam.gserviceaccount.com   --set-env-vars P1_BASE_URL=https://<P1_HOST>,P2_BASE_URL=https://<P2_HOST>,TIMEOUT_SECONDS=8,RETRY_ATTEMPTS=3,RETRY_BACKOFF_FACTOR=0.3   --set-secrets P1_API_KEY=p1-api-key:latest,P2_API_KEY=p2-api-key:latest   --memory 256Mi   --cpu 1   --min-instances 0   --max-instances 2   --allow-unauthenticated
+```

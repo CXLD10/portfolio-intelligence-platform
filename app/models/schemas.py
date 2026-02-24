@@ -64,6 +64,8 @@ class BenchmarkMetrics(BaseModel):
 
 
 class IntelligenceResponse(BaseModel):
+    degraded: bool = False
+    degraded_source: str | None = None
     exchange: Exchange
     symbol: str
     price: float
@@ -168,4 +170,7 @@ class HealthResponse(BaseModel):
     status: str
     service: str
     timestamp: datetime
+    project1_status: str
+    project2_status: str
+    latency_ms: float
     schema_version: str
