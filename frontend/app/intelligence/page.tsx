@@ -1,8 +1,22 @@
-import { getIntelligence } from '@/lib/api'
-export default async function Intelligence(){const d=await getIntelligence('INFY','NSE'); return <div className='grid md:grid-cols-3 gap-4'>
-<div className='panel md:col-span-2'><h2 className='font-semibold'>AI Reasoning</h2><p className='text-sm text-slate-300 mt-2'>{d.summary}</p><div className='mt-3 text-sm'>Model: {d.provenance.model_version}</div></div>
-<div className='panel'><h2 className='font-semibold'>Confidence</h2><div className='text-2xl mt-2'>{(d.confidence*100).toFixed(1)}%</div></div>
-<div className='panel'><h3 className='font-semibold'>Quant</h3><p>{d.quant_score.toFixed(3)}</p></div>
-<div className='panel'><h3 className='font-semibold'>Risk</h3><p>{d.risk_score.toFixed(3)}</p></div>
-<div className='panel'><h3 className='font-semibold'>Feature Importance</h3>{Object.entries(d.explainability.feature_importance).map(([k,v])=><div key={k} className='text-sm flex justify-between'><span>{k}</span><span>{Number(v).toFixed(2)}</span></div>)}</div>
-</div>}
+import { Suspense } from 'react'
+import dynamic from 'next/dynamic'
+import { getIntelligence, getIntelligenceSummary } from '@/lib/api'
+import { ErrorCard, SkeletonCard } from '@/components/ui'
+import { SymbolSelector } from '@/components/symbol-selector'
+import { Exchange } from '@/lib/types'
+
+const IntelligenceClient = dynamic(() => import('@/components/pages/intelligence-client').then(m => m.IntelligenceClient), { ssr: false })
+
+const asExchange = (value?: string): Exchange => (['NSE', 'BSE', 'NASDAQ'].includes(value || '') ? (value as Exchange) : 'NSE')
+
+export default async function Intelligence({ searchParams }: { searchParams?: { symbol?: string; exchange?: string } }) {
+  const symbol = (searchParams?.symbol || 'INFY').toUpperCase()
+  const exchange = asExchange(searchParams?.exchange)
+
+  try {
+    const [d, executive] = await Promise.all([getIntelligence(symbol, exchange), getIntelligenceSummary()])
+    return <div className='space-y-4'><SymbolSelector action='/intelligence' symbol={symbol} exchange={exchange} /><Suspense fallback={<SkeletonCard />}><IntelligenceClient data={d} executive={executive} /></Suspense></div>
+  } catch {
+    return <div className='space-y-4'><SymbolSelector action='/intelligence' symbol={symbol} exchange={exchange} /><ErrorCard title='Intelligence unavailable' message='Unable to load stock intelligence. Please retry shortly.' /></div>
+  }
+}

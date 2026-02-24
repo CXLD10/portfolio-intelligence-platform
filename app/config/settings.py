@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 class Settings(BaseModel):
     app_name: str = os.getenv("APP_NAME", "portfolio-intelligence-platform")
-    schema_version: str = os.getenv("SCHEMA_VERSION", "1.0")
+    schema_version: str = os.getenv("SCHEMA_VERSION", "1.1")
     feature_schema_version: str = os.getenv("FEATURE_SCHEMA_VERSION", "1.0")
     composite_formula_version: str = os.getenv("COMPOSITE_FORMULA_VERSION", "2.0")
     api_prefix: str = os.getenv("API_PREFIX", "/api/v1")

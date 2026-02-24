@@ -124,6 +124,7 @@ class PortfolioEngine:
             correlation_matrix={k: {kk: round(vv, 6) for kk, vv in v.items()} for k, v in corr.items()},
             risk_contribution={k: round(v, 6) for k, v in rc_map.items()},
             stress_tests=self._stress_tests(exp_return, vol, var95),
+            expected_asset_returns={k: round(v, 6) for k, v in expected.items()},
             schema_version=settings.schema_version,
         )
         self.cache.set(key, out, settings.portfolio_cache_ttl_s)

@@ -29,7 +29,7 @@
 3. Service layer fetches upstream Project 1/Project 2 inputs.
 4. Deterministic analytics compute scores, confidence calibration, benchmark metrics, and stress scenarios.
 5. Response is cached (short TTL for intelligence/portfolio endpoints).
-6. Response envelope includes `schema_version: "1.0"`.
+6. Response envelope includes `schema_version: "1.1"`.
 
 ## API Catalog
 
