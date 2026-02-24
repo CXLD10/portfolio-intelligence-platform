@@ -1,7 +1,44 @@
-import { IntelligenceResponse, PortfolioResponse } from './types'
+import { cache } from 'react'
+import {
+  IntelligenceResponse,
+  IntelligenceSummaryResponse,
+  PortfolioResponse,
+} from './types'
+
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-export async function getIntelligence(symbol:string, exchange:string){ const r=await fetch(`${API}/api/v1/intelligence?symbol=${symbol}&exchange=${exchange}`,{cache:'no-store'}); if(!r.ok) throw new Error('intelligence failed'); return r.json() as Promise<IntelligenceResponse> }
-export async function getMarketOverview(){ const r=await fetch(`${API}/api/v1/market/overview`,{cache:'no-store'}); if(!r.ok) throw new Error('market overview failed'); return r.json() }
-export async function getSentiment(symbol:string,exchange:string){ const r=await fetch(`${API}/api/v1/sentiment?symbol=${symbol}&exchange=${exchange}`,{cache:'no-store'}); if(!r.ok) throw new Error('sentiment failed'); return r.json() }
-export async function getBacktest(symbol:string,exchange:string){ const r=await fetch(`${API}/api/v1/backtest?symbol=${symbol}&exchange=${exchange}&period=252`,{cache:'no-store'}); if(!r.ok) throw new Error('backtest failed'); return r.json() }
-export async function evaluatePortfolio(payload:unknown){ const r=await fetch(`${API}/api/v1/portfolio/evaluate`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)}); if(!r.ok) throw new Error('portfolio failed'); return r.json() as Promise<PortfolioResponse> }
+
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const r = await fetch(`${API}${path}`, { cache: 'no-store', ...init })
+  if (!r.ok) throw new Error(`Request failed: ${path}`)
+  return r.json() as Promise<T>
+}
+
+export const getIntelligence = cache(async (symbol: string, exchange: string) =>
+  fetchJson<IntelligenceResponse>(`/api/v1/intelligence?symbol=${symbol}&exchange=${exchange}`),
+)
+
+export const getIntelligenceSummary = cache(async () => {
+  try {
+    return await fetchJson<IntelligenceSummaryResponse>(`/api/v1/intelligence/summary`)
+  } catch {
+    return null
+  }
+})
+
+export const getMarketOverview = cache(async () => fetchJson<any>(`/api/v1/market/overview`))
+
+export const getSentiment = cache(async (symbol: string, exchange: string) =>
+  fetchJson<any>(`/api/v1/sentiment?symbol=${symbol}&exchange=${exchange}`),
+)
+
+export const getBacktest = cache(async (symbol: string, exchange: string) =>
+  fetchJson<any>(`/api/v1/backtest?symbol=${symbol}&exchange=${exchange}&period=252`),
+)
+
+export async function evaluatePortfolio(payload: unknown) {
+  return fetchJson<PortfolioResponse>(`/api/v1/portfolio/evaluate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}

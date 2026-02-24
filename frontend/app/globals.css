@@ -1,5 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-html,body{background:#0b0f14;color:#e6edf7}
-.panel{background:#121923;border:1px solid #1f2a3a;border-radius:.75rem;padding:1rem}
+
+html,body{background:#0a0f15;color:#e2e8f0}
+.panel{background:#101722;border:1px solid #1e293b;border-radius:.85rem;padding:1rem;box-shadow:0 4px 20px rgba(2,6,23,.2)}
+.kpi{font-size:1.8rem;font-weight:600;letter-spacing:-0.02em}
+.page-enter{animation:fade .35s ease}
+@keyframes fade{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
